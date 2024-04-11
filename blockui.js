@@ -1,11 +1,9 @@
 /*!
- * jQuery blockUI plugin v20240404 - by raveren - MIT license
+ * jQuery blockUI plugin v20240411 - by raveren - MIT license
  * https://github.com/raveren/blockui
- *
  * Usage:
- *  $('.selector').block() -> $('.selector').unblock()
- *
- *  $.blockUi() -> $.unblockUi()
+ *  $('.selector').block() -> $('.selector').unblock() -> $('.selector').isBlocked()
+ *  $.blockUi() -> $.unblockUi() -> $.isUiBlocked()
  */
 
 ;(function () {
@@ -18,6 +16,9 @@
         };
         $.unblockUi = function () {
             doUnblock(window);
+        };
+        $.isUiBlocked = function () {
+            return $(window).isBlocked();
         };
 
         // plugin method for blocking element content
@@ -41,6 +42,10 @@
             return this.each(function () {
                 doUnblock(this);
             });
+        };
+
+        $.fn.isBlocked = function () {
+            return this.data(dataKey)
         };
 
         // styles

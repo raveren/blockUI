@@ -19,6 +19,10 @@ $('.selector').unblock()
 $.blockUI(); 
 /* ➡️ */ 
 $.unblockUI()
+
+// get status:
+$('.selector').isBlocked()
+$.isUiBlocked()
 ```
 
 Inspired by https://github.com/malsup/blockui

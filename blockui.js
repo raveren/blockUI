@@ -1,5 +1,5 @@
 /*!
- * jQuery blockUI plugin v20240411 - by raveren - MIT license
+ * jQuery blockUI plugin v20240416 - by raveren - MIT license
  * https://github.com/raveren/blockui
  * Usage:
  *  $('.selector').block() -> $('.selector').unblock() -> $('.selector').isBlocked()
@@ -207,7 +207,7 @@
         function bind($el, turnOn) {
 
             // lets do our best to block all input events
-            const events = 'mousedown.blockUi mouseup.blockUi keydown keypress.blockUi keyup.blockUi '
+            const events = 'mousedown.blockUi mouseup.blockUi keydown.blockUi keypress.blockUi keyup.blockUi '
                 + 'touchstart.blockUi touchend.blockUi touchmove.blockUi submit.blockUi';
             if (turnOn) {
                 $el.each(function () {

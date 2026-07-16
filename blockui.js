@@ -1,8 +1,8 @@
 /*!
- * jQuery blockUI plugin v20240416 - by raveren - MIT license
+ * jQuery blockUI plugin v20260716 - by raveren - MIT license
  * https://github.com/raveren/blockui
  * Usage:
- *  $('.selector').block() -> $('.selector').unblock() -> $('.selector').isBlocked()
+ *  $('.selector').block([message]) -> $('.selector').unblock() -> $('.selector').isBlocked()
  *  $.blockUi() -> $.unblockUi() -> $.isUiBlocked()
  */
 
@@ -11,8 +11,8 @@
         const dataKey = 'blockUi.isBlocked';
 
         // global $ methods for blocking/unblocking the entire page
-        $.blockUi = function () {
-            doBlock(window);
+        $.blockUi = function (message) {
+            doBlock(window, message);
         };
         $.unblockUi = function () {
             doUnblock(window);
@@ -22,14 +22,14 @@
         };
 
         // plugin method for blocking element content
-        $.fn.block = function () {
+        $.fn.block = function (message) {
             if (this[0] === window) {
-                $.blockUi();
+                $.blockUi(message);
                 return this;
             }
 
             return this.each(function () {
-                doBlock(this);
+                doBlock(this, message);
             });
         };
 
@@ -53,10 +53,6 @@
             = '@keyframes block-ui-animation{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
         $.blockUi.defaults = {
             // message displayed when blocking (use null for no message)
-            message: '<div style="width:35px;height:35px;border:5px solid;border-color:#ed6f2f transparent;'
-                + 'border-radius:50%;display:inline-block;box-sizing:border-box;'
-                + 'animation:block-ui-animation 1s linear infinite;"></div>',
-
             css: {
                 padding: 0,
                 margin: 0,
@@ -95,13 +91,19 @@
             timeout: 0
         };
 
-        function doBlock(el) {
+        function doBlock(el, message) {
             const full = (el === window);
             const $el = full ? $('body') : $(el);
             const opts = $.blockUi.defaults;
             let css = opts.css;
-            let msg = opts.message;
+            let msg = '<div style="width:35px;height:35px;border:5px solid;border-color:#ed6f2f transparent;'
+                + 'border-radius:50%;display:inline-block;box-sizing:border-box;'
+                + 'animation:block-ui-animation 1s linear infinite;"></div>';
             let z = opts.baseZ;
+
+            if (message) {
+                msg += '<div style="display:inline-block;margin-left:10px;font-size: 30px;vertical-align: center">' + message + '</div>'
+            }
 
             if ($el.data(dataKey)) {
                 return;

@@ -52,17 +52,14 @@
         document.head.appendChild(document.createElement('style')).innerHTML
             = '@keyframes block-ui-animation{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
         $.blockUi.defaults = {
-            // message displayed when blocking (use null for no message)
+            // message displayed when blocking
             css: {
                 padding: 0,
                 margin: 0,
-                width: '',
+                width: '100%',
                 top: 'calc(50% - 17px)',
-                left: 'calc(50% - 17px)',
                 textAlign: 'center',
-                color: '#000',
                 border: '0',
-                backgroundColor: '#fff',
                 background: 'transparent',
                 cursor: 'progress'
             },
@@ -102,7 +99,9 @@
             let z = opts.baseZ;
 
             if (message) {
-                msg += '<div style="display:inline-block;margin-left:10px;font-size: 30px;vertical-align: center">' + message + '</div>'
+                msg += '<div style="display:inline-block;margin-left:10px;font-size: 30px;vertical-align: center">'
+                    + message
+                    + '</div>'
             }
 
             if ($el.data(dataKey)) {

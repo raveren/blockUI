@@ -83,9 +83,7 @@
         function doBlock(el, message) {
             const $el = getJquery(el);
 
-            console.log(`%c block-ui.min.js:85\n blocked:`, 'color:#0;', 'blocked', el);
             if ($el.isBlocked()) {
-                console.log(`%c block-ui.min.js:85\n canceler:`, 'color:#0;', 'canceler', el);
                 return this;
             }
 
@@ -159,8 +157,6 @@
 
         // remove the block
         function doUnblock(el) {
-            console.log(`%c block-ui.min.js:85\n :`, 'color:#0;', 'unblocked', el);
-
             const $el = getJquery(el);
             const opts = $.blockUi.defaults;
 

@@ -1,9 +1,9 @@
 /*!
- * jQuery blockUI plugin v20260716 - by raveren - MIT license
+ * jQuery blockUI plugin v20260727 - by raveren - MIT license
  * https://github.com/raveren/blockui
  * Usage:
  *  $('.selector').block([message]) -> $('.selector').unblock() -> $('.selector').isBlocked()
- *  $.blockUi() -> $.unblockUi() -> $.isUiBlocked()
+ *  $.blockUi([message]) -> $.unblockUi() -> $.isUiBlocked()
  */
 
 ;(function () {
@@ -23,11 +23,6 @@
 
         // plugin method for blocking element content
         $.fn.block = function (message) {
-            if (this[0] === window) {
-                $.blockUi(message);
-                return this;
-            }
-
             return this.each(function () {
                 doBlock(this, message);
             });
@@ -35,22 +30,19 @@
 
         // plugin method for unblocking element content
         $.fn.unblock = function () {
-            if (this[0] === window) {
-                $.unblockUi();
-                return this;
-            }
             return this.each(function () {
                 doUnblock(this);
             });
         };
 
         $.fn.isBlocked = function () {
-            return this.data(dataKey)
+            return !! this.data(dataKey)
         };
 
         // styles
         document.head.appendChild(document.createElement('style')).innerHTML
             = '@keyframes block-ui-animation{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+
         $.blockUi.defaults = {
             // message displayed when blocking
             css: {
@@ -89,8 +81,15 @@
         };
 
         function doBlock(el, message) {
-            const full = (el === window);
-            const $el = full ? $('body') : $(el);
+            const $el = getJquery(el);
+
+            console.log(`%c block-ui.min.js:85\n blocked:`, 'color:#0;', 'blocked', el);
+            if ($el.isBlocked()) {
+                console.log(`%c block-ui.min.js:85\n canceler:`, 'color:#0;', 'canceler', el);
+                return this;
+            }
+
+            const full = $el.is('body');
             const opts = $.blockUi.defaults;
             let css = opts.css;
             let msg = '<div style="width:35px;height:35px;border:5px solid;border-color:#ed6f2f transparent;'
@@ -104,9 +103,6 @@
                     + '</div>'
             }
 
-            if ($el.data(dataKey)) {
-                return;
-            }
             $el.data(dataKey, true)
 
             // block key and mouse events
@@ -163,18 +159,16 @@
 
         // remove the block
         function doUnblock(el) {
-            const full = (el === window);
-            const $el = full ? $('body') : $(el);
+            console.log(`%c block-ui.min.js:85\n :`, 'color:#0;', 'unblocked', el);
+
+            const $el = getJquery(el);
             const opts = $.blockUi.defaults;
 
-            if (! $el.data(dataKey)) {
-                return;
-            }
             $el.data(dataKey, false)
 
             bind($el, false);
 
-            let els = $el.find('>.block-ui');
+            const els = $el.find('>.block-ui');
 
             if (opts.fadeOut) {
                 let count = els.length;
@@ -186,6 +180,14 @@
             } else {
                 reset(els, opts, el);
             }
+        }
+
+        function getJquery(el) {
+            if (! (el instanceof jQuery)) {
+                el = $(el);
+            }
+
+            return el.is('window') ? $('body') : el;
         }
 
         // move blocking element back into the DOM where it started

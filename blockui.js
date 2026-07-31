@@ -1,5 +1,5 @@
 /*!
- * jQuery blockUI plugin v20260727 - by raveren - MIT license
+ * jQuery blockUI plugin v20260731 - by raveren - MIT license
  * https://github.com/raveren/blockui
  * Usage:
  *  $('.selector').block([message]) -> $('.selector').unblock() -> $('.selector').isBlocked()
@@ -12,13 +12,13 @@
 
         // global $ methods for blocking/unblocking the entire page
         $.blockUi = function (message) {
-            doBlock(window, message);
+            doBlock('body', message);
         };
         $.unblockUi = function () {
-            doUnblock(window);
+            doUnblock('body');
         };
         $.isUiBlocked = function () {
-            return $(window).isBlocked();
+            return $('body').isBlocked();
         };
 
         // plugin method for blocking element content
@@ -183,7 +183,7 @@
                 el = $(el);
             }
 
-            return el.is('window') ? $('body') : el;
+            return el.is(window) ? $('body') : el;
         }
 
         // move blocking element back into the DOM where it started

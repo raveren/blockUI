@@ -1,234 +1,155 @@
 /*!
- * jQuery blockUI plugin v20260731 - by raveren - MIT license
+ * jQuery blockUI plugin v20261028 - by raveren - MIT license
  * https://github.com/raveren/blockui
  * Usage:
- *  $('.selector').block([message]) -> $('.selector').unblock() -> $('.selector').isBlocked()
- *  $.blockUi([message]) -> $.unblockUi() -> $.isUiBlocked()
+ *  `$('.selector').block([message])` -> `$('.selector').unblock()` + `$('.selector').isBlocked()`
+ *  `$.blockUi([message])` -> `$.unblockUi()` + `$.isUiBlocked()`
  */
 
 ;(function () {
     function setup($) {
-        const dataKey = 'blockUi.isBlocked';
+        // The blocked state is a class plus one transparent shield element that swallows pointer events and
+        // carries the spinner and the message;
+        const hostClass = 'block-ui-host';
+        const blockedClass = 'block-ui-blocked';
+        const shieldClass = 'block-ui-shield';
+        const messageClass = 'block-ui-message';
+        const messageControls = '.' + messageClass + ' a, .' + messageClass + ' button';
+        const elementsWithoutPseudoElements = 'img, input, select, textarea, iframe, video, audio, canvas, object, embed';
 
         // global $ methods for blocking/unblocking the entire page
         $.blockUi = function (message) {
-            doBlock('body', message);
+            doBlock($('body'), message);
         };
         $.unblockUi = function () {
-            doUnblock('body');
+            doUnblock($('body'));
         };
         $.isUiBlocked = function () {
             return $('body').isBlocked();
         };
 
-        // plugin method for blocking element content
         $.fn.block = function (message) {
             return this.each(function () {
-                doBlock(this, message);
+                doBlock(getTarget(this), message);
             });
         };
 
-        // plugin method for unblocking element content
         $.fn.unblock = function () {
             return this.each(function () {
-                doUnblock(this);
+                doUnblock(getTarget(this));
             });
         };
 
         $.fn.isBlocked = function () {
-            return !! this.data(dataKey)
+            return this.hasClass(blockedClass);
         };
 
-        // styles
-        document.head.appendChild(document.createElement('style')).innerHTML
-            = '@keyframes block-ui-animation{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+        document.head.appendChild(document.createElement('style')).innerHTML = buildStyles();
+        swallowInputEvents();
 
-        $.blockUi.defaults = {
-            // message displayed when blocking
-            css: {
-                padding: 0,
-                margin: 0,
-                width: '100%',
-                top: 'calc(50% - 17px)',
-                textAlign: 'center',
-                border: '0',
-                background: 'transparent',
-                cursor: 'progress'
-            },
-
-            overlayCSS: {
-                backgroundColor: '#fff',
-                backgroundImage: 'linear-gradient(45deg,#eee 25%,rgba(238,238,238,0) 25%,rgba(238,238,238,0) 75%,'
-                    + '#eee 75%,#eee),linear-gradient(45deg,#eee 25%,rgba(238,238,238,0) 25%,rgba(238,238,238,0) 75%,'
-                    + '#eee 75%,#eee)',
-                backgroundSize: '20px 20px',
-                backgroundPosition: '0 0,10px 10px',
-                opacity: .6,
-                cursor: 'progress'
-            },
-
-            // z-index for the blocking overlay
-            baseZ: 1000,
-
-            // fadeIn time in millis; set to 0 to disable fadeIn on block
-            fadeIn: 200,
-
-            // fadeOut time in millis; set to 0 to disable fadeOut on unblock
-            fadeOut: 400,
-
-            // time in millis to wait before auto-unblocking; set to 0 to disable auto-unblock
-            timeout: 0
-        };
-
-        function doBlock(el, message) {
-            const $el = getJquery(el);
+        function doBlock($el, message) {
+            assertCanRenderOverlay($el);
 
             if ($el.isBlocked()) {
-                return this;
+                return;
             }
 
-            const full = $el.is('body');
-            const opts = $.blockUi.defaults;
-            let css = opts.css;
-            let msg = '<div style="width:35px;height:35px;border:5px solid;border-color:#ed6f2f transparent;'
-                + 'border-radius:50%;display:inline-block;box-sizing:border-box;'
-                + 'animation:block-ui-animation 1s linear infinite;"></div>';
-            let z = opts.baseZ;
+            $el.addClass(hostClass).append(
+                $('<div class="' + shieldClass + '">').append(
+                    $('<span class="' + messageClass + '">').append(message || '')
+                )
+            );
+            // Flush styles so the overlay and the shield exist at opacity 0 before being shown, otherwise
+            // they would be created already visible and the fade-in would be skipped.
+            void $el[0].offsetWidth;
+            $el.addClass(blockedClass);
+        }
 
-            if (message) {
-                msg += '<div style="display:inline-block;margin-left:10px;font-size: 30px;vertical-align: center">'
-                    + message
-                    + '</div>'
-            }
+        function doUnblock($el) {
+            $el.removeClass(blockedClass).children('.' + shieldClass).remove();
+        }
 
-            $el.data(dataKey, true)
+        function getTarget(el) {
+            return (el === window || el === document) ? $('body') : $(el);
+        }
 
-            // block key and mouse events
-            bind($el, true);
+        function assertCanRenderOverlay($el) {
+            const el = $el[0];
 
-            if ($el.css('position') === 'static') {
-                $el.css('position', 'relative')
-                    .data('blockUi.wasStatic', true);
-            }
-
-            // blockUI uses 3 layers for blocking, for simplicity they are all used on every platform;
-            // layer1 is the iframe layer which is used to supress bleed through of underlying content
-            // layer2 is the overlay layer which has opacity and a wait cursor (by default)
-            // layer3 is the message content that is displayed while blocking
-            let lyr1, lyr2, lyr3, s;
-            lyr1 = $('<div class="block-ui" style="display:none"></div>');
-
-            lyr2 = $('<div class="block-ui block-ui-overlay" style="z-index:' + (z++)
-                + ';display:none;border:none;margin:0;padding:0;width:100%;height:100%;top:0;left:0"></div>');
-
-            if (full) {
-                s = '<div class="block-ui block-ui-page" style="z-index:' + (z + 10)
-                    + ';display:none;position:fixed"></div>';
-            } else {
-                s = '<div class="block-ui block-ui-element" style="z-index:' + (z + 10)
-                    + ';display:none;position:absolute"></div>';
-            }
-            lyr3 = $(s);
-            lyr3.css(css);
-
-            // style the overlay
-            lyr2.css(opts.overlayCSS);
-            lyr2.css('position', full ? 'fixed' : 'absolute');
-
-            const layers = [lyr1, lyr2, lyr3]
-            $.each(layers, function () {
-                this.appendTo($el);
-            });
-
-            // show the message
-            lyr3.append(msg);
-            if (msg.jquery || msg.nodeType) {
-                $(msg).show();
-            }
-
-            if (opts.fadeIn) {
-                lyr2.fadeIn(opts.fadeIn);
-                lyr3.fadeIn(opts.fadeIn);
-            } else {
-                lyr2.show();
-                lyr3.show();
+            if ($el.is(elementsWithoutPseudoElements) || el instanceof SVGElement) {
+                throw new Error(
+                    'blockUi: <' + el.tagName.toLowerCase() + '> cannot show the overlay because it does not'
+                    + ' support ::before/::after pseudo-elements. Block a wrapping element instead.'
+                );
             }
         }
 
-        // remove the block
-        function doUnblock(el) {
-            const $el = getJquery(el);
-            const opts = $.blockUi.defaults;
+        // One capturing listener per event type on the document, so cloned shields work without any
+        // handler of their own. Touch events are only stopped, not cancelled, so scrolling keeps working.
+        function swallowInputEvents() {
+            const isOn = (event, selector) => event.target instanceof Element
+                && event.target.closest(selector)
+                && ! event.target.closest(messageControls);
 
-            $el.data(dataKey, false)
-
-            bind($el, false);
-
-            const els = $el.find('>.block-ui');
-
-            if (opts.fadeOut) {
-                let count = els.length;
-                els.stop().fadeOut(opts.fadeOut, function () {
-                    if (--count === 0) {
-                        reset(els, opts, el);
+            ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu'].forEach(type =>
+                document.addEventListener(type, function (event) {
+                    if (isOn(event, '.' + shieldClass)) {
+                        event.preventDefault();
+                        event.stopPropagation();
                     }
-                });
-            } else {
-                reset(els, opts, el);
-            }
+                }, true)
+            );
+
+            ['touchstart', 'touchend'].forEach(type =>
+                document.addEventListener(type, function (event) {
+                    if (isOn(event, '.' + shieldClass)) {
+                        event.stopPropagation();
+                    }
+                }, {capture: true, passive: true})
+            );
+
+            ['keydown', 'keypress', 'keyup', 'beforeinput'].forEach(type =>
+                document.addEventListener(type, function (event) {
+                    if (isOn(event, '.' + blockedClass)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                }, true)
+            );
         }
 
-        function getJquery(el) {
-            if (! (el instanceof jQuery)) {
-                el = $(el);
-            }
+        function buildStyles() {
+            const stripes = 'linear-gradient(45deg,#eee 25%,rgba(238,238,238,0) 25%,rgba(238,238,238,0) 75%,'
+                + '#eee 75%,#eee)';
 
-            return el.is(window) ? $('body') : el;
-        }
+            // :where() has zero specificity, so an element's own non-static position always wins.
+            // The host class is doubled so the overlay wins over a site's own pseudo-element rules
+            // (e.g. Bootstrap's dropdown caret) regardless of stylesheet order.
+            // ::before is the striped overlay; the shield on top of it centers the spinner and the message.
+            const host = '.' + hostClass + '.' + hostClass;
+            const shield = host + '>.' + shieldClass;
+            const message = shield + '>.' + messageClass;
 
-        // move blocking element back into the DOM where it started
-        function reset(els, opts, el) {
-            const $el = $(el);
-
-            els.each(function () {
-                // remove via DOM calls so we don't lose event handlers
-                if (this.parentNode) {
-                    this.parentNode.removeChild(this);
-                }
-            });
-
-            if ($el.data('blockUi.wasStatic')) {
-                $el.css('position', 'static'); // #22
-            }
-        }
-
-        // bind/unbind the handler
-        function bind($el, turnOn) {
-
-            // lets do our best to block all input events
-            const events = 'mousedown.blockUi mouseup.blockUi keydown.blockUi keypress.blockUi keyup.blockUi '
-                + 'touchstart.blockUi touchend.blockUi touchmove.blockUi submit.blockUi';
-            if (turnOn) {
-                $el.each(function () {
-                    let current = this;
-                    $(current).on(events, function (e) {
-                        e.preventDefault()
-                        e.stopImmediatePropagation()
-                        return false
-                    })
-
-                    // we make the newly created event be the first to fire and stop every other one
-                    events.split(' ').forEach(function (event) {
-                        handlers = $._data(current).events[event.split('.')[0]];
-                        handlers.unshift(handlers.pop());
-                    })
-                })
-            } else {
-                $el.off(events);
-            }
+            return ':where(.' + hostClass + '){position:relative}'
+                + host + '::before{'
+                + 'content:"";display:block;position:absolute;z-index:1000;top:0;left:0;width:100%;height:100%;'
+                + 'margin:0;border:0;opacity:0;pointer-events:none;transition:opacity .4s;'
+                + 'background-color:#fff;background-image:' + stripes + ',' + stripes + ';'
+                + 'background-size:20px 20px;background-position:0 0,10px 10px}'
+                + '.' + blockedClass + '.' + blockedClass + '::before{opacity:.6;transition-duration:.2s}'
+                + shield + '{position:absolute;z-index:1020;top:0;left:0;width:100%;height:100%;'
+                + 'display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;'
+                + 'cursor:progress}'
+                + host + '.' + blockedClass + '>.' + shieldClass + '{opacity:1}'
+                + message + '{font-size:30px;line-height:35px;white-space:nowrap}'
+                + message + '::before{content:"";display:inline-block;width:35px;height:35px;box-sizing:border-box;'
+                + 'border:5px solid;border-color:#ed6f2f transparent;border-radius:50%;vertical-align:top;'
+                + 'animation:block-ui-spin 1s linear infinite}'
+                + message + ':not(:empty)::before{margin-right:10px}'
+                + '@keyframes block-ui-spin{to{transform:rotate(360deg)}}'
+                + 'body' + host + '::before,body' + shield + '{position:fixed}';
         }
     }
-
 
     /*global define:true */
     if (typeof define === 'function' && define.amd && define.amd.jQuery) {

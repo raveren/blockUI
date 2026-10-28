@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>blockui tests</title>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="../blockui.js"></script>
+<style>
+    /* Bootstrap-like caret, to prove a site's own pseudo-element styling does not break the overlay */
+    .dropdown-toggle::before { content: "x"; display: inline-block; position: static; width: 10px; height: 10px;
+        border-top: .3em solid; }
+    .box { width: 300px; height: 100px; background: #cde; margin: 10px; }
+    .absolute { position: absolute; top: 500px; left: 10px; }
+    #floating { position: absolute; top: 620px; left: 10px; width: 200px; height: 60px; background: #fdd; }
+    #under-floating { position: absolute; top: 630px; left: 20px; }
+    #modal { position: fixed; top: 20px; left: 20px; width: 200px; height: 60px; background: #dfd; z-index: 5000; }
+</style>
+</head>
+<body>
+<div class="box" id="plain"></div>
+<div class="box" id="padded" style="padding: 20px"><a id="link" href="#clicked" style="display:block;height:40px;background:#fc9">link</a></div>
+<div class="box" id="messaged"></div>
+<div class="box" id="source"></div>
+<form id="form"><input id="field" type="text"></form>
+<p>inline <a id="inline" href="#">inline link in text</a> text</p>
+<table id="table" style="width: 400px"><tr><td>cell</td><td>cell</td></tr><tr><td>cell</td><td>cell</td></tr></table>
+<button id="caret" class="dropdown-toggle">dropdown</button>
+<div class="box absolute" id="absolute"></div>
+<a id="under-floating" href="#under">link under a floating blocked panel</a>
+<div id="floating"></div>
+<div id="modal"><button id="modal-button">modal button</button></div>
+<div id="replaced"><input id="input"><img id="img" alt=""><svg id="svg" width="10" height="10"></svg></div>
+<pre id="out"></pre>
+
+<script>
+window.__tests = (async function () {
+    const out = [];
+    const check = (name, isOk, detail) => out.push((isOk ? 'PASS ' : 'FAIL ') + name + (isOk ? '' : ' -> ' + detail));
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const opacity = (el, pseudo) => parseFloat(getComputedStyle($(el)[0], pseudo).opacity);
+    const pseudoWidth = (el, pseudo) => parseFloat(getComputedStyle($(el)[0], pseudo).width)
+        + parseFloat(getComputedStyle($(el)[0], pseudo).paddingLeft);
+    const isBetween = (value, low, high) => value > low && value < high;
+    const shieldOf = el => $(el).children('.block-ui-shield');
+    const messageOf = el => shieldOf(el).children('.block-ui-message');
+    const centerOf = el => {
+        const rect = $(el)[0].getBoundingClientRect();
+        return [rect.left + rect.width / 2, rect.top + rect.height / 2];
+    };
+    const dispatch = (el, type, Constructor = MouseEvent) => {
+        const event = new Constructor(type, {bubbles: true, cancelable: true});
+        $(el)[0].dispatchEvent(event);
+        return event;
+    };
+
+    // 1. block: state, fade-in, geometry
+    const plain = $('#plain');
+    plain.block();
+    check('block adds host and blocked class', plain.is('.block-ui-host.block-ui-blocked'), plain.attr('class'));
+    check('block appends one shield', shieldOf(plain).length === 1, plain[0].outerHTML);
+    check('isBlocked true', plain.isBlocked());
+    check('host becomes position relative', getComputedStyle(plain[0]).position === 'relative', getComputedStyle(plain[0]).position);
+    check('fade-in starts from 0', opacity(plain, '::before') < 0.3 && parseFloat(getComputedStyle(shieldOf(plain)[0]).opacity) < 0.5, opacity(plain, '::before'));
+    await wait(300);
+    check('fade-in ends at .6', opacity(plain, '::before') === 0.6, opacity(plain, '::before'));
+    check('shield and spinner visible', getComputedStyle(shieldOf(plain)[0]).opacity === '1' && getComputedStyle(messageOf(plain)[0], '::before').animationName === 'block-ui-spin', getComputedStyle(messageOf(plain)[0], '::before').animationName);
+    check('overlay covers element', pseudoWidth(plain, '::before') === 300, pseudoWidth(plain, '::before'));
+    check('shield covers element', shieldOf(plain)[0].getBoundingClientRect().width === 300 && shieldOf(plain)[0].getBoundingClientRect().height === 100, shieldOf(plain)[0].getBoundingClientRect().width);
+    check('shield shows progress cursor', getComputedStyle(shieldOf(plain)[0]).cursor === 'progress', getComputedStyle(shieldOf(plain)[0]).cursor);
+    check('spinner box is 35px without message', messageOf(plain)[0].getBoundingClientRect().width === 35, messageOf(plain)[0].getBoundingClientRect().width);
+    check('spinner is centered', Math.abs(centerOf(messageOf(plain))[0] - centerOf(plain)[0]) < 1 && Math.abs(centerOf(messageOf(plain))[1] - centerOf(plain)[1]) < 1, centerOf(messageOf(plain)) + ' vs ' + centerOf(plain));
+    check('no inline style added', plain[0].getAttribute('style') === null, plain[0].getAttribute('style'));
+    plain.block();
+    check('double block is idempotent', shieldOf(plain).length === 1, plain[0].outerHTML);
+
+    // 2. unblock: state and fade-out
+    plain.unblock();
+    check('unblock removes blocked class, keeps host', plain.is('.block-ui-host:not(.block-ui-blocked)'), plain.attr('class'));
+    check('unblock removes shield immediately', shieldOf(plain).length === 0 && plain.children().length === 0, plain[0].outerHTML);
+    check('isBlocked false', ! plain.isBlocked());
+    await wait(100);
+    check('fade-out in progress', isBetween(opacity(plain, '::before'), 0, 0.6), opacity(plain, '::before'));
+    await wait(500);
+    check('fade-out ends at 0', opacity(plain, '::before') === 0, opacity(plain, '::before'));
+    $('#never').unblock();
+    check('unblock of never blocked element does not throw', true);
+
+    // 3. rapid block/unblock/block ends blocked
+    plain.block(); plain.unblock(); plain.block();
+    await wait(300);
+    check('rapid block-unblock-block ends blocked', plain.isBlocked() && shieldOf(plain).length === 1 && opacity(plain, '::before') === 0.6, opacity(plain, '::before'));
+    plain.unblock();
+
+    // 4. the shield swallows pointer events, nothing underneath reacts
+    const link = $('#link');
+    let linkClicks = 0;
+    let parentClicks = 0;
+    link.on('click', e => { linkClicks++; });
+    $('#padded').on('click mousedown', () => parentClicks++);
+    link.block();
+    const hit = document.elementFromPoint(...centerOf(link));
+    check('shield is the topmost element over the blocked area', shieldOf(link)[0].contains(hit), hit?.outerHTML);
+    let clickEvent = dispatch(hit, 'click');
+    dispatch(hit, 'mousedown');
+    dispatch(hit, 'pointerdown', PointerEvent);
+    check('click on shield is cancelled', clickEvent.defaultPrevented);
+    check('click on shield reaches neither the link nor its parent', linkClicks === 0 && parentClicks === 0, linkClicks + '/' + parentClicks);
+    check('link default action did not run', location.hash !== '#clicked', location.hash);
+    link.unblock();
+    check('unblocked element is hit-testable again', document.elementFromPoint(...centerOf(link)) === link[0], document.elementFromPoint(...centerOf(link))?.id);
+    clickEvent = dispatch(link, 'click');
+    check('click on unblocked link works again', linkClicks === 1 && parentClicks === 1 && ! clickEvent.defaultPrevented, linkClicks + '/' + parentClicks);
+    location.hash = '';
+
+    // 5. keyboard input inside a blocked element is swallowed
+    const form = $('#form');
+    let formKeys = 0;
+    form.on('keydown', () => formKeys++);
+    form.block();
+    const field = $('#field')[0];
+    field.focus();
+    const keyEvent = dispatch(field, 'keydown', KeyboardEvent);
+    const inputEvent = dispatch(field, 'beforeinput', InputEvent);
+    check('keydown inside blocked form is cancelled and stopped', keyEvent.defaultPrevented && formKeys === 0, formKeys);
+    check('beforeinput inside blocked form is cancelled', inputEvent.defaultPrevented);
+    form.unblock();
+    dispatch(field, 'keydown', KeyboardEvent);
+    check('keydown reaches the form again after unblock', formKeys === 1, formKeys);
+    field.blur();
+
+    // 6. stacking: a real modal above a blocked element gets the clicks, a blocked panel floating over a link does not let them through
+    const table = $('#table');
+    table.block();
+    $('#modal').css({top: table[0].getBoundingClientRect().top + 'px', left: table[0].getBoundingClientRect().left + 'px'});
+    check('element above a blocked element stays clickable', document.elementFromPoint(...centerOf('#modal')) === $('#modal-button')[0] || document.elementFromPoint(...centerOf('#modal')) === $('#modal')[0], document.elementFromPoint(...centerOf('#modal'))?.id);
+    table.unblock();
+    $('#modal').remove();
+    const floating = $('#floating');
+    floating.block();
+    let underClicks = 0;
+    $('#under-floating').on('click', e => { e.preventDefault(); underClicks++; });
+    const underHit = document.elementFromPoint(...centerOf('#under-floating'));
+    dispatch(underHit, 'click');
+    check('blocked panel floating over a link shields it', underHit === shieldOf(floating)[0] && underClicks === 0, underHit?.outerHTML + ' ' + underClicks);
+    floating.unblock();
+
+    // 7. message: HTML, with a working link, next to the spinner
+    const messaged = $('#messaged');
+    let messageLinkClicks = 0;
+    let messagedHostClicks = 0;
+    messaged.on('click', () => messagedHostClicks++);
+    messaged.block('<a id="message-link" href="#reload">Click to Refresh Page</a>');
+    const messageLink = $('#message-link');
+    messageLink.on('click', e => { e.preventDefault(); messageLinkClicks++; });
+    check('message is rendered as HTML inside the shield', messageLink.closest('.block-ui-message').length === 1 && messageLink.closest('.block-ui-shield').length === 1, shieldOf(messaged)[0].outerHTML);
+    check('message widens the spinner box', messageOf(messaged)[0].getBoundingClientRect().width > 100, messageOf(messaged)[0].getBoundingClientRect().width);
+    check('message link is the topmost element', document.elementFromPoint(...centerOf(messageLink)) === messageLink[0], document.elementFromPoint(...centerOf(messageLink))?.outerHTML);
+    const messageClick = dispatch(messageLink, 'click');
+    check('click on message link is not swallowed', messageLinkClicks === 1 && messagedHostClicks === 1 && messageClick.defaultPrevented, messageLinkClicks + '/' + messagedHostClicks);
+    const messageKey = dispatch(messageLink, 'keydown', KeyboardEvent);
+    check('keydown on message link is not swallowed', ! messageKey.defaultPrevented);
+    const besideMessageClick = dispatch(shieldOf(messaged), 'click');
+    check('click beside the message is still swallowed', besideMessageClick.defaultPrevented && messagedHostClicks === 1, messagedHostClicks);
+    messaged.unblock();
+    check('message is removed with the shield', $('#message-link').length === 0 && messaged.children().length === 0, messaged[0].outerHTML);
+    messaged.block();
+    check('block without message has an empty message span', messageOf(messaged).is(':empty'), messageOf(messaged)[0].outerHTML);
+    messaged.unblock();
+
+    // 8. clone taken during fade-out: no shield, no overlay, no transition
+    const source = $('#source');
+    source.block();
+    await wait(300);
+    source.unblock();
+    const fadingClone = source.clone(true).attr('id', 'fading-clone').appendTo('body');
+    check('clone mid-fade-out is not blocked', ! fadingClone.isBlocked() && shieldOf(fadingClone).length === 0, fadingClone[0].outerHTML);
+    check('clone mid-fade-out is invisible immediately', opacity(fadingClone, '::before') === 0, opacity(fadingClone, '::before'));
+    await wait(500);
+    check('clone mid-fade-out stays invisible', opacity(fadingClone, '::before') === 0, opacity(fadingClone, '::before'));
+
+    // 9. clone taken while blocked: looks blocked, shields, unblocks with the originals
+    source.block();
+    const blockedClone = source.clone().attr('id', 'blocked-clone').appendTo('body');
+    check('clone of blocked element is blocked', blockedClone.isBlocked() && shieldOf(blockedClone).length === 1, blockedClone[0].outerHTML);
+    check('clone of blocked element shows overlay at once', opacity(blockedClone, '::before') === 0.6, opacity(blockedClone, '::before'));
+    check('cloned shield swallows clicks without clone(true)', dispatch(shieldOf(blockedClone), 'click').defaultPrevented);
+    $('#source, #blocked-clone').unblock();
+    check('original and clone lose their shields', shieldOf(source).length === 0 && shieldOf(blockedClone).length === 0);
+    await wait(600);
+    check('original and clone both fade out', opacity(source, '::before') === 0 && opacity(blockedClone, '::before') === 0, opacity(source, '::before') + '/' + opacity(blockedClone, '::before'));
+
+    // 10. whole page
+    $.blockUi('Loading');
+    check('page block marks body', $('body').is('.block-ui-host.block-ui-blocked') && shieldOf('body').length === 1, $('body')[0].className);
+    check('$.isUiBlocked', $.isUiBlocked());
+    check('page overlay and shield are fixed', getComputedStyle(document.body, '::before').position === 'fixed' && getComputedStyle(shieldOf('body')[0]).position === 'fixed');
+    check('page shield is on top', document.elementFromPoint(10, 10) === shieldOf('body')[0], document.elementFromPoint(10, 10)?.outerHTML);
+    $.unblockUi();
+    check('$.unblockUi', ! $.isUiBlocked() && shieldOf('body').length === 0);
+    $(window).block();
+    check('$(window).block() blocks body', $.isUiBlocked());
+    $(document).unblock();
+    check('$(document).unblock() unblocks body', ! $.isUiBlocked());
+    await wait(500);
+
+    // 11. element kinds
+    table.block();
+    check('table overlay covers table', pseudoWidth(table, '::before') === table[0].offsetWidth, pseudoWidth(table, '::before') + '/' + table[0].offsetWidth);
+    check('table shield covers table', shieldOf(table)[0].getBoundingClientRect().width === table[0].offsetWidth, shieldOf(table)[0].getBoundingClientRect().width);
+    table.unblock();
+    const inline = $('#inline');
+    inline.block();
+    check('inline element overlay matches its box', Math.abs(pseudoWidth(inline, '::before') - inline[0].getBoundingClientRect().width) < 1, pseudoWidth(inline, '::before') + '/' + inline[0].getBoundingClientRect().width);
+    check('inline element shield matches its box', Math.abs(shieldOf(inline)[0].getBoundingClientRect().width - inline[0].getBoundingClientRect().width) < 1, shieldOf(inline)[0].getBoundingClientRect().width);
+    inline.unblock();
+    const absolute = $('#absolute');
+    absolute.block();
+    check('own position is kept', getComputedStyle(absolute[0]).position === 'absolute', getComputedStyle(absolute[0]).position);
+    absolute.unblock();
+    const caret = $('#caret');
+    caret.block();
+    const caretBefore = getComputedStyle(caret[0], '::before');
+    check('site ::before styling is overridden by the overlay', caretBefore.position === 'absolute' && caretBefore.borderTopWidth === '0px' && caretBefore.content === '""' && Math.abs(pseudoWidth(caret, '::before') - caret[0].clientWidth) < 1, caretBefore.position + ' ' + caretBefore.borderTopWidth + ' ' + caretBefore.content + ' ' + pseudoWidth(caret, '::before') + '/' + caret[0].clientWidth);
+    caret.unblock();
+
+    // 12. elements without pseudo-elements throw
+    for (const id of ['input', 'img', 'svg']) {
+        let error = null;
+        try { $('#' + id).block(); } catch (e) { error = e; }
+        check(id + ' throws', error instanceof Error && error.message.includes('<' + id + '>') && error.message.includes('pseudo-elements'), error && error.message);
+    }
+    check('wrapper of replaced elements can be blocked', (() => { $('#replaced').block(); return $('#replaced').isBlocked(); })());
+    $('#replaced').unblock();
+
+    document.getElementById('out').textContent = out.join('\n');
+    return out;
+})();
+</script>
+</body>
+</html>
